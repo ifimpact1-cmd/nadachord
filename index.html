@@ -24,6 +24,8 @@ nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:14px 4
 .gw{max-width:420px;margin:0 auto}.str{flex:1;text-align:center;background:#111827;border:2px solid var(--bd);border-radius:50%;aspect-ratio:1;display:flex;flex-direction:column;justify-content:center;font-weight:800;font-size:17px;min-width:0}
 .str small{font-size:10px;color:var(--mu);font-weight:400}.str.on{border-color:var(--ac);color:var(--ac)}.str.ok{background:var(--ac);color:#06220f}
 #needle{transition:transform .12s;transform-origin:150px 150px}
+.bdg{cursor:pointer;background:#111827;border:1px solid var(--ac);color:var(--ac);border-radius:10px;padding:6px 10px;font-weight:800;font-size:14px}.bdg:empty{display:none}
+.srow{border-top:1px solid var(--bd);padding:10px 0}.sm{padding:8px 12px}.s.on{background:var(--ac);color:#06220f}.srow input{flex:1;min-width:90px}
 </style></head><body>
 <h1>🎸 Nada & Chord</h1>
 <div id="pageSong">
@@ -32,7 +34,7 @@ nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:14px 4
 <span class="mu" id="fn"> belum ada file</span><div class="mu" id="st"></div></div>
 
 <div class="card" id="res" hidden>
-<div class="mu">Nada dasar (Do =)</div><div class="big" id="doKey">-</div>
+<div class="mu">Nada dasar (Do =)</div><div class="row" style="align-items:center;gap:12px"><div class="big" id="doKey">-</div><div id="bpmBig" class="bdg"></div></div>
 <div class="mu" id="keyInfo"></div><div class="alt" id="alt"></div></div>
 
 <div class="card" id="ctl" hidden>
@@ -46,10 +48,10 @@ nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:14px 4
 <audio id="au" controls></audio>
 <div class="row" style="margin-top:10px"><button class="s" id="exw">⬇ Ekspor WAV</button><button class="s" id="exm">⬇ Ekspor MP3</button></div></div>
 
-<div class="card" id="chc" hidden><div class="row" style="justify-content:space-between"><b>Chord</b><span class="mu" id="bpm"></span></div>
+<div class="card" id="chc" hidden><div class="row" style="justify-content:space-between"><b>Chord</b></div>
 <div class="big" id="now" style="margin:6px 0">-</div><canvas id="tl"></canvas>
 <div class="row" style="margin-top:8px"><button class="s" id="b1">⇦ Geser hitungan</button><button class="s" id="bh">½×</button><button class="s" id="bd">2×</button></div>
-<div class="mu" style="margin-top:6px">Garis tebal = ketukan 1 (4/4), garis putus = setengah ketukan. Perkiraan, bukan 100% akurat.</div></div>
+<div class="mu" style="margin-top:6px">Garis tebal = ketukan 1. Ketuk kotak BPM di atas untuk ganti birama (2/4, 3/4, 4/4, 6/8). Perkiraan, bukan 100% akurat.</div></div>
 </div>
 <div id="pageTune" hidden><div class="card gw" style="text-align:center">
 <svg viewBox="0 0 300 160" width="100%"><path d="M46 90A120 120 0 0 1 254 90" fill="none" stroke="#374151" stroke-width="6"/><g id="ticks"></g>
@@ -57,7 +59,12 @@ nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:14px 4
 <div class="big" id="tn" style="font-size:56px">-</div><div id="hz" class="mu">- Hz</div><div id="tc" style="margin:8px 0;font-weight:700">Tekan mulai, lalu petik satu senar</div>
 <div class="row" id="strs" style="flex-wrap:nowrap;margin:12px 0"></div>
 <button id="tb">🎤 Mulai</button></div></div>
-<nav><button id="n1" class="on">🎵 Lagu</button><button id="n2">🎸 Tuner</button></nav>
+<div id="pageStem" hidden><div class="card"><b>🎚 Pisah Instrumen</b>
+<div class="mu" id="stInfo" style="margin:6px 0">Pilih lagu dulu di tab Lagu.</div>
+<button id="sai" disabled>🧠 Pisah AI (kualitas Moises)</button> <button id="sgo" class="s" disabled>✂ Cepat (kasar)</button><div class="mu" id="sp"></div></div>
+<div class="card" id="mix" hidden><div class="row"><button id="spp">▶</button><input id="ssk" type="range" min="0" max="1000" value="0" style="flex:1"><span class="mu" id="stm">0:00</span></div><div id="rows"></div>
+<div class="mu" style="margin-top:8px">Mute = matikan, Solo = dengar sendiri. Pemisahan memakai metode matematika biasa (bukan AI), jadi hasilnya kasar: masih ada sisa suara lain.</div></div></div>
+<nav><button id="n1" class="on">🎵 Lagu</button><button id="n2">🎸 Tuner</button><button id="n3">🎚 Stem</button></nav>
 <script>
 const $=s=>document.querySelector(s),NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const wait=()=>new Promise(r=>setTimeout(r,0));
@@ -112,7 +119,7 @@ $('#file').onchange=async e=>{
  catch(err){$('#st').textContent='Format tidak didukung browser ini. Coba MP3/WAV/M4A/OGG.';return}
  if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(f);au.src=fileUrl;outCh=null;
  sem=0;tempo=1;$('#sem').value=0;$('#tempo').value=100;$('#semv').textContent=0;$('#tv').textContent=100;
- await analyze();await detectBeat();$('#st').textContent='Selesai ('+Math.round(buf.duration)+' dtk)';
+ await analyze();await detectBeat();stemReset();$('#st').textContent='Selesai ('+Math.round(buf.duration)+' dtk)';
  ['#res','#ctl','#chc'].forEach(s=>$(s).hidden=false);showKey(0);drawChords()};
 
 $('#sem').oninput=e=>$('#semv').textContent=e.target.value;
@@ -157,18 +164,33 @@ $('#exm').onclick=async()=>{if(!buf)return;$('#pg').textContent='Menyiapkan MP3�
  parts.push(enc.flush());$('#pg').textContent='';dl(new Blob(parts,{type:'audio/mpeg'}),'hasil.mp3')};
 
 // Ketukan
-let beat={p:.5,o:0,sh:0};
+let beat={p:.5,o:0,sh:0,m:4};const MT={2:'2/4',3:'3/4',4:'4/4',6:'6/8'},bt0=()=>'≈ '+Math.round(60/beat.p)+' BPM · '+MT[beat.m];
 async function detectBeat(){
  $('#st').textContent='Mendeteksi ketukan…';await wait();
  const sr=buf.sampleRate,h=Math.floor(sr*.005),c0=buf.getChannelData(0),n=Math.floor(buf.length/h),env=new Float32Array(n),on=new Float32Array(n);
  for(let i=0;i<n;i++){let q=0;for(let j=0;j<h;j+=2){const v=c0[i*h+j];q+=v*v}env[i]=Math.sqrt(q)}
  for(let i=1;i<n;i++)on[i]=Math.max(0,env[i]-env[i-1]);
+ const lo=new Float32Array(n),onL=new Float32Array(n);let ly=0;for(let i=0;i<n;i++){let q=0;for(let j=0;j<h;j++){ly+=.04*(c0[i*h+j]-ly);q+=ly*ly}lo[i]=Math.sqrt(q)}for(let i=1;i<n;i++)onL[i]=Math.max(0,lo[i]-lo[i-1]);
  let bl=100,bv=-1;
  for(let l=66;l<=200;l++){let q=0;for(let i=0;i+l<n;i++)q+=on[i]*on[i+l];const bpm=12000/l;q*=1-.3*Math.abs(Math.log2(bpm/110));if(q>bv){bv=q;bl=l}}
  await wait();let bp=bl,bo=0,bs=-1;
  for(let p=bl-1.5;p<=bl+1.5;p+=.03)for(let f=0;f<50;f++){const ph=p*f/50;let q=0;for(let t=ph;t<n-2;t+=p){const i=Math.round(t);q+=Math.max(on[i-1]||0,on[i],on[i+1])}if(q>bs){bs=q;bp=p;bo=ph}}
- beat={p:bp*.005,o:bo*.005,sh:0}}
-$('#b1').onclick=()=>beat.sh=(beat.sh+1)%4;
+ const K=Math.floor((n-bo)/bp),st=[],sl=[],at=(x,k)=>{const i=Math.round(bo+k*bp);return Math.max(x[i-1]||0,x[i]||0,x[i+1]||0)};
+ for(let k=0;k<K;k++){st.push(at(on,k));sl.push(at(onL,k))}
+ const mean=st.reduce((x,y)=>x+y,0)/(K||1),z=st.map(v=>v-mean),den=z.reduce((x,y)=>x+y*y,0)||1,ac=l=>{let q=0;for(let i=0;i+l<K;i++)q+=z[i]*z[i+l];return q/den};
+ const sc={2:ac(2)*.8,3:(ac(3)+ac(6))/2,4:((ac(4)+ac(8))/2)*1.05},bps=bp*.005,bos=bo*.005,ch=[];
+ for(let i=1;i<chords.length;i++)if(chords[i].c!=='-'&&chords[i-1].c!=='-')ch.push(chords[i].start+.25);
+ const votes=m=>{const v=Array(m).fill(0);let tot=0;for(const t of ch){const kf=(t-bos)/bps,k=Math.round(kf);if(k>=0&&Math.abs(kf-k)*bps<=.3){v[k%m]++;tot++}}return{v,tot}};
+ const cs=m=>{const{v,tot}=votes(m);return tot<4?0:(Math.max(...v)/tot-1/m)/(1-1/m)};
+ const mw={2:.4,3:1,4:1.1},tt={};for(const c of [2,3,4])tt[c]=2*sc[c]+mw[c]*cs(c);
+ let m=4;for(const c of [2,3,4])if(tt[c]>tt[m])m=c;
+ const vv=votes(m),ra=Array(m).fill(0),rl=Array(m).fill(0),cn=Array(m).fill(0);
+ for(let k=0;k<K;k++){ra[k%m]+=st[k];rl[k%m]+=sl[k];cn[k%m]++}
+ const A=ra.map((v,i)=>v/(cn[i]||1)),Lw=rl.map((v,i)=>v/(cn[i]||1)),am=Math.max(...A)||1,lm=Math.max(...Lw)||1;
+ let br=0,bm=-1;for(let r=0;r<m;r++){const v=A[r]/am*.5+Lw[r]/lm+(vv.tot?vv.v[r]/vv.tot:0)*3;if(v>bm){bm=v;br=r}}
+ beat={p:bps,o:bos,sh:(m-br)%m,m};bpmT='';$('#bpmBig').textContent=bt0()}
+$('#bpmBig').onclick=()=>{const L=[2,3,4,6];beat.m=L[(L.indexOf(beat.m)+1)%4];beat.sh=0};
+$('#b1').onclick=()=>beat.sh=(beat.sh+1)%beat.m;
 $('#bh').onclick=()=>beat.p*=2;$('#bd').onclick=()=>beat.p/=2;
 
 const cv=$('#tl'),cx=cv.getContext('2d'),PPS=70;let nowT='',bpmT='';
@@ -184,18 +206,19 @@ function draw(){
   cx.fillStyle=on?'#22c55e':'#1f2937';cx.beginPath();cx.roundRect(x0+1,22,Math.max(2,x1-x0-2),H-30,6);cx.fill();
   cx.save();cx.beginPath();cx.rect(x0+1,22,x1-x0-2,H-30);cx.clip();cx.fillStyle=on?'#06220f':'#f3f4f6';cx.font='bold 14px system-ui';cx.textBaseline='middle';cx.fillText(cname(c.c),Math.max(x0+5,Math.min(5,x1-30)),22+(H-30)/2);cx.restore()});
  const p=beat.p,t0=t-px/PPS-1,t1=t+(W-px)/PPS+1;cx.textAlign='center';
- for(let k=Math.floor((t0-beat.o)/p);beat.o+k*p<t1;k++){const tt=beat.o+k*p;if(tt<0)continue;const x=X(tt),b=(((k+beat.sh)%4)+4)%4;
+ for(let k=Math.floor((t0-beat.o)/p);beat.o+k*p<t1;k++){const tt=beat.o+k*p;if(tt<0)continue;const x=X(tt),b=(((k+beat.sh)%beat.m)+beat.m)%beat.m;
   cx.strokeStyle=b?'rgba(156,163,175,.45)':'rgba(243,244,246,.85)';cx.lineWidth=b?1:2.5;cx.setLineDash([]);cx.beginPath();cx.moveTo(x,16);cx.lineTo(x,H);cx.stroke();
   cx.fillStyle=b?'#9ca3af':'#fff';cx.font=(b?'10':'bold 12')+'px system-ui';cx.fillText(b+1,x,10);
   const hx=X(tt+p/2);cx.strokeStyle='rgba(156,163,175,.25)';cx.lineWidth=1;cx.setLineDash([3,4]);cx.beginPath();cx.moveTo(hx,20);cx.lineTo(hx,H);cx.stroke()}
  cx.setLineDash([]);cx.textAlign='left';cx.strokeStyle='#f97316';cx.lineWidth=2;cx.beginPath();cx.moveTo(px,0);cx.lineTo(px,H);cx.stroke();
  let nt='-';if(ci>=0){const nx=chords.slice(ci+1).find(c=>cname(c.c)!==cname(chords[ci].c));nt=cname(chords[ci].c)+(nx?'  →  '+cname(nx.c):'')}
  if(nt!==nowT){nowT=nt;$('#now').textContent=nt}
- const bt='≈ '+Math.round(60/beat.p*(outCh?tempo:1))+' BPM · 4/4';if(bt!==bpmT){bpmT=bt;$('#bpm').textContent=bt}}
+ const bt=bt0();if(bt!==bpmT){bpmT=bt;$('#bpmBig').textContent=bt}}
 draw();
 
 // Halaman
-function page(n){$('#pageSong').hidden=n!==1;$('#pageTune').hidden=n!==2;$('#n1').className=n==1?'on':'';$('#n2').className=n==2?'on':'';if(n==1&&tOn)$('#tb').click();window.scrollTo(0,0)}
+function page(n){$('#pageSong').hidden=n!==1;$('#pageTune').hidden=n!==2;$('#pageStem').hidden=n!==3;[1,2,3].forEach(i=>$('#n'+i).className=n==i?'on':'');if(n!=2&&tOn)$('#tb').click();if(n==3)au.pause();else sPause();window.scrollTo(0,0)}
+$('#n3').onclick=()=>page(3);
 $('#n1').onclick=()=>page(1);$('#n2').onclick=()=>page(2);
 
 // Tuner
@@ -220,5 +243,76 @@ $('#tb').onclick=async()=>{
   if(!found&&++quiet>40){setNeedle(0);sc=0}
   requestAnimationFrame(loop)})()};
 
+
+// STEM
+let stems=null,sAc,sGain=[],sSrc=[],sVol=[1,1,1,1],sMu=[0,0,0,0],sSo=[0,0,0,0],sT0=0,sOff=0,sPl=false,sDur=0;
+const SN=['🥁 Drum','🎸 Bass','🎤 Vokal (tengah)','🎸🎹 Gitar & lainnya'],SF=['drum','bass','vokal','gitar-lainnya'];
+function stemReset(){sKill();sPl=false;stems=null;$('#mix').hidden=true;$('#sgo').disabled=false;$('#sai').disabled=false;$('#stInfo').textContent='🧠 AI = hasil bersih ala Moises (Drum, Bass, Vokal, Gitar/lainnya). Pertama kali download model ±172 MB (sekali saja), butuh internet & Chrome dengan WebGPU. ✂ Cepat = kasar, tanpa download.'}
+function sKill(){sSrc.forEach(x=>{try{x.stop()}catch(e){}});sSrc=[]}
+function sGains(){const a=sSo.some(x=>x);sGain.forEach((g,i)=>g.gain.value=sVol[i]*(a?(sSo[i]?1:0):(sMu[i]?0:1)))}
+const sNow=()=>sPl?sOff+sAc.currentTime-sT0:sOff;
+function sPlayAt(o){sKill();sAc.resume();sOff=Math.max(0,Math.min(o,sDur-.05));sSrc=stems.map((b,i)=>{const x=sAc.createBufferSource();x.buffer=b;x.connect(sGain[i]);x.start(0,sOff);return x});sT0=sAc.currentTime;sPl=true;$('#spp').textContent='⏸'}
+function sPause(){if(!sPl)return;sOff=sNow();sKill();sPl=false;$('#spp').textContent='▶'}
+const fmt=t=>Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
+$('#spp').onclick=()=>{if(!stems)return;sPl?sPause():sPlayAt(sOff)};
+$('#ssk').oninput=e=>{if(!stems)return;const o=e.target.value/1000*sDur;sPl?sPlayAt(o):sOff=o};
+(function sl(){requestAnimationFrame(sl);if(!stems||$('#pageStem').hidden)return;const t=sNow();if(sPl&&t>=sDur){sPause();sOff=0}if(document.activeElement!==$('#ssk'))$('#ssk').value=t/sDur*1000;$('#stm').textContent=fmt(t)+' / '+fmt(sDur)})();
+$('#mix').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;const i=+b.dataset.i,a=b.dataset.a;
+ if(a=='m'){sMu[i]^=1;b.classList.toggle('on',!!sMu[i])}if(a=='s'){sSo[i]^=1;b.classList.toggle('on',!!sSo[i])}
+ if(a=='d'){const x=stems[i];dl(wavBlob([...Array(x.numberOfChannels)].map((_,c)=>x.getChannelData(c)),x.sampleRate),SF[i]+'.wav')}sGains()};
+$('#mix').oninput=e=>{if(e.target.classList.contains('sv')){sVol[+e.target.dataset.i]=e.target.value/100;sGains()}};
+
+$('#sgo').onclick=async()=>{
+ if(!buf)return;$('#sgo').disabled=true;sPause();sAc=new (window.AudioContext||window.webkitAudioContext)();
+ const dec=buf.sampleRate>=32000?2:1,sr2=buf.sampleRate/dec,c0=buf.getChannelData(0),c1=buf.numberOfChannels>1?buf.getChannelData(1):c0,len=Math.floor(buf.length/dec),m=new Float32Array(len),sd=new Float32Array(len);
+ for(let i=0;i<len;i++){let a=0,b=0;for(let j=0;j<dec;j++){const L=c0[i*dec+j],R=c1[i*dec+j];a+=L+R;b+=L-R}m[i]=a/(2*dec);sd[i]=b/(2*dec)}
+ const N=2048,Hh=N/2,H=Hh+1,w=new Float32Array(N).map((_,i)=>Math.sin(Math.PI*i/N)),nF=Math.floor((len-N)/Hh)+1,out=[0,1,2,3].map(()=>new Float32Array(len)),cl=x=>Math.max(0,Math.min(1,x)),wb=new Float32Array(H),vw=new Float32Array(H);
+ for(let k=0;k<H;k++){const f=k*sr2/N;wb[k]=cl((280-f)/100);vw[k]=cl((f-150)/100)*cl((7000-f)/2500)}
+ const B=240,Mg=4,re=new Float32Array(N),im=new Float32Array(N),z=[0,1,2,3].map(()=>new Float32Array(N)),hm=new Float32Array(H);
+ for(let s=0;s<nF;s+=B){
+  const f0=Math.max(0,s-Mg),f1=Math.min(nF,s+B+Mg),F=f1-f0,mr=new Float32Array(F*H),mi=new Float32Array(F*H),mg=new Float32Array(F*H),s2=new Float32Array(F*H);
+  for(let f=0;f<F;f++){const p=(f0+f)*Hh;for(let i=0;i<N;i++){re[i]=m[p+i]*w[i];im[i]=sd[p+i]*w[i]}fft(re,im);
+   for(let k=0;k<H;k++){const kk=(N-k)%N,o=f*H+k,a=(re[k]+re[kk])/2,b=(im[k]-im[kk])/2,c=(im[k]+im[kk])/2,d=(re[kk]-re[k])/2;mr[o]=a;mi[o]=b;mg[o]=Math.hypot(a,b);s2[o]=c*c+d*d}}
+  for(let f=s;f<Math.min(nF,s+B);f++){
+   const lf=f-f0,A=Math.max(0,lf-Mg),Zt=Math.min(F-1,lf+Mg);
+   for(let k=0;k<H;k++){let q=0;for(let t=A;t<=Zt;t++)q+=mg[t*H+k];hm[k]=q/(Zt-A+1)}
+   for(let k=0;k<H;k++){let q=0,c=0;const j1=Math.min(H-1,k+4);for(let j=Math.max(0,k-4);j<=j1;j++){q+=mg[lf*H+j];c++}
+    const P=q/c,P2=P*P,H2=hm[k]*hm[k],pm=P2/(P2+H2+1e-12),hk=1-pm,o=lf*H+k,cen=mg[o]*mg[o]/(mg[o]*mg[o]+s2[o]+1e-12),vm=hk*(1-wb[k])*vw[k]*cen,bm=hk*wb[k],om=hk-bm-vm,Mr=mr[o],Mi=mi[o];
+    [[0,pm,bm],[2,vm,om]].forEach(([n,a,b])=>{const R=z[n],I=z[n+1];R[k]=a*Mr-b*Mi;I[k]=a*Mi+b*Mr;if(k>0&&k<Hh){R[N-k]=a*Mr+b*Mi;I[N-k]=-a*Mi+b*Mr}})}
+   for(const n of [0,2]){fft(z[n+1],z[n]);const p=f*Hh;for(let i=0;i<N;i++){out[n][p+i]+=z[n][i]/N*w[i];out[n+1][p+i]+=z[n+1][i]/N*w[i]}}
+  }
+  $('#sp').textContent='Memisahkan… '+Math.round(Math.min(1,(s+B)/nF)*100)+'%';await wait()}
+ stems=out.map(a=>{const b=sAc.createBuffer(1,len,sr2);b.copyToChannel(a,0);return b});sDur=len/sr2;sOff=0;
+ sGain=stems.map(()=>{const g=sAc.createGain();g.connect(sAc.destination);return g});sVol=[1,1,1,1];sMu=[0,0,0,0];sSo=[0,0,0,0];
+ $('#rows').innerHTML=SN.map((n,i)=>`<div class="srow"><b>${n}</b><div class="row" style="margin-top:6px"><input class="sv" type="range" min="0" max="150" value="100" data-i="${i}"><button class="s sm" data-a="m" data-i="${i}">Mute</button><button class="s sm" data-a="s" data-i="${i}">Solo</button><button class="s sm" data-a="d" data-i="${i}">⬇</button></div></div>`).join('');
+ sGains();$('#mix').hidden=false;$('#sp').textContent='Selesai ✅ (22 kHz, mono)';$('#sgo').disabled=false;$('#spp').textContent='▶'};
+
+// STEM AI (Demucs via ONNX Runtime Web)
+const MURL='https://huggingface.co/timcsy/demucs-web-onnx/resolve/main/htdemucs_embedded.onnx';
+async function getModel(sp){
+ const c=await caches.open('nc-model'),hit=await c.match(MURL);if(hit)return hit.arrayBuffer();
+ const rs=await fetch(MURL);if(!rs.ok)throw new Error('Gagal unduh model ('+rs.status+')');
+ const tot=+rs.headers.get('content-length')||180e6,rd=rs.body.getReader(),ch=[];let l=0;
+ for(;;){const{done,value}=await rd.read();if(done)break;ch.push(value);l+=value.length;sp('Mengunduh model AI… '+Math.round(l/1048576)+' / '+Math.round(tot/1048576)+' MB')}
+ const bl=new Blob(ch);try{await c.put(MURL,new Response(bl))}catch(e){}return bl.arrayBuffer()}
+function buildRows(arr,note){
+ stems=arr;sDur=arr[0].duration;sOff=0;sGain=stems.map(()=>{const g=sAc.createGain();g.connect(sAc.destination);return g});sVol=[1,1,1,1];sMu=[0,0,0,0];sSo=[0,0,0,0];
+ $('#rows').innerHTML=SN.map((n,i)=>`<div class="srow"><b>${n}</b><div class="row" style="margin-top:6px"><input class="sv" type="range" min="0" max="150" value="100" data-i="${i}"><button class="s sm" data-a="m" data-i="${i}">Mute</button><button class="s sm" data-a="s" data-i="${i}">Solo</button><button class="s sm" data-a="d" data-i="${i}">⬇</button></div></div>`).join('');
+ sGains();$('#mix').hidden=false;$('#sp').textContent=note;$('#spp').textContent='▶'}
+$('#sai').onclick=async()=>{
+ if(!buf)return;$('#sai').disabled=$('#sgo').disabled=true;sPause();sAc=new (window.AudioContext||window.webkitAudioContext)();const sp=t=>$('#sp').textContent=t;
+ try{
+  sp('Memuat mesin AI…');const V='1.22.0',B='https://cdn.jsdelivr.net/npm/onnxruntime-web@'+V+'/dist/';
+  const ort=await import(B+'ort.webgpu.min.mjs');ort.env.wasm.wasmPaths=B;ort.env.wasm.numThreads=self.crossOriginIsolated?(navigator.hardwareConcurrency||4):1;
+  const{DemucsProcessor}=await import('https://cdn.jsdelivr.net/npm/demucs-web@1.0.2/+esm');
+  const model=await getModel(sp);sp('Menyiapkan audio…');
+  const oc=new OfflineAudioContext(2,Math.ceil(buf.duration*44100),44100),src=oc.createBufferSource();src.buffer=buf;src.connect(oc.destination);src.start();const rb=await oc.startRendering();
+  const L=rb.getChannelData(0),R=rb.numberOfChannels>1?rb.getChannelData(1):L;
+  const pr=new DemucsProcessor({ort,sessionOptions:{enableCpuMemArena:false,enableMemPattern:false},onProgress:o=>sp('AI memisahkan… '+Math.round((o.progress??o)*100)+'%'+(o.totalSegments?` (bagian ${o.currentSegment}/${o.totalSegments})`:''))});
+  sp('Memuat model ke memori…');await pr.loadModel(model);const t0=Date.now(),res=await pr.separate(L,R);
+  const mk=x=>{const b=sAc.createBuffer(2,x.left.length,44100);b.copyToChannel(x.left,0);b.copyToChannel(x.right,1);return b};
+  buildRows([res.drums,res.bass,res.vocals,res.other].map(mk),'Selesai ✅ AI Demucs ('+Math.round((Date.now()-t0)/1000)+' dtk, 44,1 kHz stereo)');
+ }catch(e){console.error(e);sp('Gagal: '+(e.message||e)+' — pastikan internet aktif dan pakai Chrome terbaru (butuh WebGPU).')}
+ $('#sai').disabled=$('#sgo').disabled=false};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
 </script></body></html>
