@@ -17,8 +17,16 @@ input[type=range]{width:100%}.row{display:flex;gap:8px;flex-wrap:wrap;align-item
 .ch{background:#111827;border:1px solid var(--bd);border-radius:8px;padding:6px 10px;font-weight:700;min-width:54px;text-align:center}
 .ch small{display:block;color:var(--mu);font-weight:400;font-size:10px}.ch.on{background:var(--ac);color:#06220f}
 audio{width:100%;margin-top:8px}.alt button{margin:4px 4px 0 0}
+body{padding-bottom:90px}
+#tl{width:100%;height:96px;display:block;background:#0b1220;border-radius:10px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#0b1220;border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom);z-index:9}
+nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:14px 4px;font-size:15px}nav button.on{color:var(--ac)}
+.gw{max-width:420px;margin:0 auto}.str{flex:1;text-align:center;background:#111827;border:2px solid var(--bd);border-radius:50%;aspect-ratio:1;display:flex;flex-direction:column;justify-content:center;font-weight:800;font-size:17px;min-width:0}
+.str small{font-size:10px;color:var(--mu);font-weight:400}.str.on{border-color:var(--ac);color:var(--ac)}.str.ok{background:var(--ac);color:#06220f}
+#needle{transition:transform .12s;transform-origin:150px 150px}
 </style></head><body>
 <h1>🎸 Nada & Chord</h1>
+<div id="pageSong">
 
 <div class="card"><label class="btn">📂 Pilih file lagu<input id="file" type="file" accept="audio/*,video/*" hidden></label>
 <span class="mu" id="fn"> belum ada file</span><div class="mu" id="st"></div></div>
@@ -38,12 +46,18 @@ audio{width:100%;margin-top:8px}.alt button{margin:4px 4px 0 0}
 <audio id="au" controls></audio>
 <div class="row" style="margin-top:10px"><button class="s" id="exw">⬇ Ekspor WAV</button><button class="s" id="exm">⬇ Ekspor MP3</button></div></div>
 
-<div class="card" id="chc" hidden><b>Chord (ikut pitch)</b><div id="chords" style="margin-top:8px"></div>
-<div class="mu">Hasil berupa perkiraan, bukan 100% akurat.</div></div>
-
-<div class="card"><b>🎤 Tuner gitar</b><div class="big" id="tn">-</div><div class="mu" id="tc">Tekan mulai, petik satu senar</div>
-<button id="tb" style="margin-top:8px">Mulai</button></div>
-
+<div class="card" id="chc" hidden><div class="row" style="justify-content:space-between"><b>Chord</b><span class="mu" id="bpm"></span></div>
+<div class="big" id="now" style="margin:6px 0">-</div><canvas id="tl"></canvas>
+<div class="row" style="margin-top:8px"><button class="s" id="b1">⇦ Geser hitungan</button><button class="s" id="bh">½×</button><button class="s" id="bd">2×</button></div>
+<div class="mu" style="margin-top:6px">Garis tebal = ketukan 1 (4/4), garis putus = setengah ketukan. Perkiraan, bukan 100% akurat.</div></div>
+</div>
+<div id="pageTune" hidden><div class="card gw" style="text-align:center">
+<svg viewBox="0 0 300 160" width="100%"><path d="M46 90A120 120 0 0 1 254 90" fill="none" stroke="#374151" stroke-width="6"/><g id="ticks"></g>
+<g id="needle"><line x1="150" y1="150" x2="150" y2="40" stroke="#f97316" stroke-width="4" stroke-linecap="round"/></g><circle cx="150" cy="150" r="8" fill="#f97316"/></svg>
+<div class="big" id="tn" style="font-size:56px">-</div><div id="hz" class="mu">- Hz</div><div id="tc" style="margin:8px 0;font-weight:700">Tekan mulai, lalu petik satu senar</div>
+<div class="row" id="strs" style="flex-wrap:nowrap;margin:12px 0"></div>
+<button id="tb">🎤 Mulai</button></div></div>
+<nav><button id="n1" class="on">🎵 Lagu</button><button id="n2">🎸 Tuner</button></nav>
 <script>
 const $=s=>document.querySelector(s),NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const wait=()=>new Promise(r=>setTimeout(r,0));
@@ -89,8 +103,8 @@ function showKey(i){const k=keys[i];$('#doKey').textContent='Do = '+NOTES[(doOf(
 let curKey=0;
 $('#alt').onclick=e=>{if(e.target.dataset.i)showKey(+e.target.dataset.i)};
 function cname(c){return c==='-'||!c?'-':NOTES[(c.r+sem+12)%12]+c.q}
-function drawChords(){$('#chords').innerHTML=chords.map((c,i)=>`<div class="ch" id="c${i}">${cname(c.c)}<small>${Math.floor(c.start/60)}:${String(Math.floor(c.start%60)).padStart(2,'0')}</small></div>`).join('')}
-let hl=-1;au.ontimeupdate=()=>{const t=au.currentTime*(outCh?tempo:1);let i=chords.findIndex(c=>t>=c.start&&t<c.end);if(i>=0&&i!==hl){$('#c'+hl)?.classList.remove('on');const e=$('#c'+i);e?.classList.add('on');e?.scrollIntoView({block:'nearest'});hl=i}};
+function drawChords(){}
+let hl=-1;
 
 $('#file').onchange=async e=>{
  const f=e.target.files[0];if(!f)return;$('#fn').textContent=' '+f.name;$('#st').textContent='Membaca file…';
@@ -98,7 +112,7 @@ $('#file').onchange=async e=>{
  catch(err){$('#st').textContent='Format tidak didukung browser ini. Coba MP3/WAV/M4A/OGG.';return}
  if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(f);au.src=fileUrl;outCh=null;
  sem=0;tempo=1;$('#sem').value=0;$('#tempo').value=100;$('#semv').textContent=0;$('#tv').textContent=100;
- await analyze();$('#st').textContent='Selesai ('+Math.round(buf.duration)+' dtk)';
+ await analyze();await detectBeat();$('#st').textContent='Selesai ('+Math.round(buf.duration)+' dtk)';
  ['#res','#ctl','#chc'].forEach(s=>$(s).hidden=false);showKey(0);drawChords()};
 
 $('#sem').oninput=e=>$('#semv').textContent=e.target.value;
@@ -142,18 +156,68 @@ $('#exm').onclick=async()=>{if(!buf)return;$('#pg').textContent='Menyiapkan MP3�
  for(let i=0;i<chs[0].length;i+=1152){const l=I(chs[0].subarray(i,i+1152)),d=chs.length>1?enc.encodeBuffer(l,I(chs[1].subarray(i,i+1152))):enc.encodeBuffer(l);if(d.length)parts.push(d);if(i%(1152*300)==0){$('#pg').textContent='Encode MP3… '+Math.round(i/chs[0].length*100)+'%';await wait()}}
  parts.push(enc.flush());$('#pg').textContent='';dl(new Blob(parts,{type:'audio/mpeg'}),'hasil.mp3')};
 
+// Ketukan
+let beat={p:.5,o:0,sh:0};
+async function detectBeat(){
+ $('#st').textContent='Mendeteksi ketukan…';await wait();
+ const sr=buf.sampleRate,h=Math.floor(sr*.005),c0=buf.getChannelData(0),n=Math.floor(buf.length/h),env=new Float32Array(n),on=new Float32Array(n);
+ for(let i=0;i<n;i++){let q=0;for(let j=0;j<h;j+=2){const v=c0[i*h+j];q+=v*v}env[i]=Math.sqrt(q)}
+ for(let i=1;i<n;i++)on[i]=Math.max(0,env[i]-env[i-1]);
+ let bl=100,bv=-1;
+ for(let l=66;l<=200;l++){let q=0;for(let i=0;i+l<n;i++)q+=on[i]*on[i+l];const bpm=12000/l;q*=1-.3*Math.abs(Math.log2(bpm/110));if(q>bv){bv=q;bl=l}}
+ await wait();let bp=bl,bo=0,bs=-1;
+ for(let p=bl-1.5;p<=bl+1.5;p+=.03)for(let f=0;f<50;f++){const ph=p*f/50;let q=0;for(let t=ph;t<n-2;t+=p){const i=Math.round(t);q+=Math.max(on[i-1]||0,on[i],on[i+1])}if(q>bs){bs=q;bp=p;bo=ph}}
+ beat={p:bp*.005,o:bo*.005,sh:0}}
+$('#b1').onclick=()=>beat.sh=(beat.sh+1)%4;
+$('#bh').onclick=()=>beat.p*=2;$('#bd').onclick=()=>beat.p/=2;
+
+const cv=$('#tl'),cx=cv.getContext('2d'),PPS=70;let nowT='',bpmT='';
+function draw(){
+ requestAnimationFrame(draw);
+ if(!buf||$('#chc').hidden||$('#pageSong').hidden)return;
+ const dpr=devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;
+ if(cv.width!==Math.round(W*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+ cx.setTransform(dpr,0,0,dpr,0,0);cx.clearRect(0,0,W,H);
+ const t=au.currentTime*(outCh?tempo:1),px=W*.3,X=q=>px+(q-t)*PPS;
+ let ci=-1;
+ chords.forEach((c,i)=>{const x0=X(c.start),x1=X(c.end),on=t>=c.start&&t<c.end;if(on)ci=i;if(x1<0||x0>W)return;
+  cx.fillStyle=on?'#22c55e':'#1f2937';cx.beginPath();cx.roundRect(x0+1,22,Math.max(2,x1-x0-2),H-30,6);cx.fill();
+  cx.save();cx.beginPath();cx.rect(x0+1,22,x1-x0-2,H-30);cx.clip();cx.fillStyle=on?'#06220f':'#f3f4f6';cx.font='bold 14px system-ui';cx.textBaseline='middle';cx.fillText(cname(c.c),Math.max(x0+5,Math.min(5,x1-30)),22+(H-30)/2);cx.restore()});
+ const p=beat.p,t0=t-px/PPS-1,t1=t+(W-px)/PPS+1;cx.textAlign='center';
+ for(let k=Math.floor((t0-beat.o)/p);beat.o+k*p<t1;k++){const tt=beat.o+k*p;if(tt<0)continue;const x=X(tt),b=(((k+beat.sh)%4)+4)%4;
+  cx.strokeStyle=b?'rgba(156,163,175,.45)':'rgba(243,244,246,.85)';cx.lineWidth=b?1:2.5;cx.setLineDash([]);cx.beginPath();cx.moveTo(x,16);cx.lineTo(x,H);cx.stroke();
+  cx.fillStyle=b?'#9ca3af':'#fff';cx.font=(b?'10':'bold 12')+'px system-ui';cx.fillText(b+1,x,10);
+  const hx=X(tt+p/2);cx.strokeStyle='rgba(156,163,175,.25)';cx.lineWidth=1;cx.setLineDash([3,4]);cx.beginPath();cx.moveTo(hx,20);cx.lineTo(hx,H);cx.stroke()}
+ cx.setLineDash([]);cx.textAlign='left';cx.strokeStyle='#f97316';cx.lineWidth=2;cx.beginPath();cx.moveTo(px,0);cx.lineTo(px,H);cx.stroke();
+ let nt='-';if(ci>=0){const nx=chords.slice(ci+1).find(c=>cname(c.c)!==cname(chords[ci].c));nt=cname(chords[ci].c)+(nx?'  →  '+cname(nx.c):'')}
+ if(nt!==nowT){nowT=nt;$('#now').textContent=nt}
+ const bt='≈ '+Math.round(60/beat.p*(outCh?tempo:1))+' BPM · 4/4';if(bt!==bpmT){bpmT=bt;$('#bpm').textContent=bt}}
+draw();
+
+// Halaman
+function page(n){$('#pageSong').hidden=n!==1;$('#pageTune').hidden=n!==2;$('#n1').className=n==1?'on':'';$('#n2').className=n==2?'on':'';if(n==1&&tOn)$('#tb').click();window.scrollTo(0,0)}
+$('#n1').onclick=()=>page(1);$('#n2').onclick=()=>page(2);
+
 // Tuner
-let tOn=false,tStream,tAc;
+const NS=[['E2',82.41],['A2',110],['D3',146.83],['G3',196],['B3',246.94],['E4',329.63]];
+$('#strs').innerHTML=NS.map((x,i)=>`<div class="str" id="s${i}">${x[0]}<small>senar ${6-i}</small></div>`).join('');
+$('#ticks').innerHTML=[-50,-40,-30,-20,-10,0,10,20,30,40,50].map(c=>{const a=c*1.2*Math.PI/180,r1=105,r2=c%50==0&&c?124:c==0?126:116;return `<line x1="${150+r1*Math.sin(a)}" y1="${150-r1*Math.cos(a)}" x2="${150+r2*Math.sin(a)}" y2="${150-r2*Math.cos(a)}" stroke="${c==0?'#22c55e':'#6b7280'}" stroke-width="${c==0?4:2}"/>`}).join('');
+let tOn=false,tStream,tAc,sc=0;
+function setNeedle(c){$('#needle').style.transform=`rotate(${c*1.2}deg)`}
 $('#tb').onclick=async()=>{
- if(tOn){tOn=false;tStream.getTracks().forEach(t=>t.stop());tAc.close();$('#tb').textContent='Mulai';return}
+ if(tOn){tOn=false;tStream.getTracks().forEach(t=>t.stop());tAc.close();$('#tb').textContent='🎤 Mulai';setNeedle(0);return}
  try{tStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})}catch(e){$('#tc').textContent='Izin mikrofon ditolak';return}
- tAc=new AudioContext();const an=tAc.createAnalyser();an.fftSize=4096;tAc.createMediaStreamSource(tStream).connect(an);tOn=true;$('#tb').textContent='Berhenti';
- const d=new Float32Array(4096),sr=tAc.sampleRate;
- (function loop(){if(!tOn)return;an.getFloatTimeDomainData(d);let rms=0;for(const x of d)rms+=x*x;rms=Math.sqrt(rms/d.length);
-  if(rms>.01){let bl=0,bc=0;const mn=Math.floor(sr/1000),mx=Math.floor(sr/70),cs=[];for(let l=mn;l<=mx;l++){let s=0,e=0;for(let i=0;i<2048;i++){s+=d[i]*d[i+l];e+=d[i+l]*d[i+l]}cs[l]=s/Math.sqrt(e+1e-9)}
-   let mxv=Math.max(...cs.filter(x=>x!==undefined));for(let l=mn;l<=mx;l++)if(cs[l]>mxv*.9){bl=l;break}
-   if(bl){const f=sr/bl,n=12*Math.log2(f/440)+69,r=Math.round(n),c=Math.round((n-r)*100);
-    $('#tn').textContent=NOTES[((r%12)+12)%12]+Math.floor(r/12-1);$('#tc').textContent=f.toFixed(1)+' Hz · '+(c>0?'+':'')+c+' cent '+(Math.abs(c)<6?'✅ pas':c>0?'(turunkan)':'(naikkan)')}}
+ tAc=new AudioContext();const an=tAc.createAnalyser();an.fftSize=4096;tAc.createMediaStreamSource(tStream).connect(an);tOn=true;$('#tb').textContent='⏹ Berhenti';
+ const d=new Float32Array(4096),sr=tAc.sampleRate;let quiet=0;
+ (function loop(){if(!tOn)return;an.getFloatTimeDomainData(d);let rms=0;for(const x of d)rms+=x*x;rms=Math.sqrt(rms/d.length);let found=false;
+  if(rms>.01){const mn=Math.floor(sr/400),mx=Math.floor(sr/70),cs=[];let mxv=0;for(let l=mn;l<=mx;l++){let q=0,e=0;for(let i=0;i<2048;i++){q+=d[i]*d[i+l];e+=d[i+l]*d[i+l]}cs[l]=q/Math.sqrt(e+1e-9);if(cs[l]>mxv)mxv=cs[l]}
+   let bl=0;for(let l=mn;l<=mx;l++)if(cs[l]>mxv*.9&&cs[l]>=(cs[l-1]||0)&&cs[l]>=(cs[l+1]||0)){bl=l;break}
+   if(bl){const f=sr/bl;let bi=0,bd=1e9;NS.forEach((x,i)=>{const dd=Math.abs(1200*Math.log2(f/x[1]));if(dd<bd){bd=dd;bi=i}});
+    const c=Math.max(-50,Math.min(50,1200*Math.log2(f/NS[bi][1])));sc+=(c-sc)*.4;setNeedle(sc);found=true;quiet=0;
+    const ok=Math.abs(c)<5;$('#tn').textContent=NS[bi][0];$('#tn').style.color=ok?'#22c55e':'#f3f4f6';$('#hz').textContent=f.toFixed(1)+' Hz · '+(c>0?'+':'')+Math.round(c)+' cent';
+    $('#tc').textContent=ok?'✅ Pas!':c<0?'Terlalu rendah, kencangkan senar ↑':'Terlalu tinggi, kendurkan senar ↓';
+    NS.forEach((x,i)=>{$('#s'+i).className='str'+(i==bi?(ok?' on ok':' on'):'')})}}
+  if(!found&&++quiet>40){setNeedle(0);sc=0}
   requestAnimationFrame(loop)})()};
 
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
