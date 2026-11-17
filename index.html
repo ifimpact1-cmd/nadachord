@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Nada & Chord</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#111827">
+<link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#111827;--card:#1f2937;--tx:#f3f4f6;--mu:#9ca3af;--ac:#22c55e;--bd:#374151}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px system-ui,sans-serif;padding:env(safe-area-inset-top) 12px 40px}
+h1{font-size:20px;margin:14px 0}.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+button,.btn{background:var(--ac);color:#06220f;border:0;border-radius:10px;padding:10px 14px;font-weight:700;font-size:15px;cursor:pointer;display:inline-block}
+button.s{background:#374151;color:var(--tx)}button:disabled{opacity:.4}
+input[type=range]{width:100%}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.big{font-size:28px;font-weight:800}.mu{color:var(--mu);font-size:13px}
+#chords{display:flex;flex-wrap:wrap;gap:6px;max-height:240px;overflow:auto}
+.ch{background:#111827;border:1px solid var(--bd);border-radius:8px;padding:6px 10px;font-weight:700;min-width:54px;text-align:center}
+.ch small{display:block;color:var(--mu);font-weight:400;font-size:10px}.ch.on{background:var(--ac);color:#06220f}
+audio{width:100%;margin-top:8px}.alt button{margin:4px 4px 0 0}
+</style></head><body>
+<h1>🎸 Nada & Chord</h1>
+
+<div class="card"><label class="btn">📂 Pilih file lagu<input id="file" type="file" accept="audio/*,video/*" hidden></label>
+<span class="mu" id="fn"> belum ada file</span><div class="mu" id="st"></div></div>
+
+<div class="card" id="res" hidden>
+<div class="mu">Nada dasar (Do =)</div><div class="big" id="doKey">-</div>
+<div class="mu" id="keyInfo"></div><div class="alt" id="alt"></div></div>
+
+<div class="card" id="ctl" hidden>
+<div class="row"><b>Pitch:</b> <span id="semv">0</span> nada</div>
+<input id="sem" type="range" min="-12" max="12" step="1" value="0">
+<div class="row"><b>Tempo:</b> <span id="tv">100</span>%</div>
+<input id="tempo" type="range" min="50" max="150" step="5" value="100">
+<div class="row"><button id="go">▶ Terapkan</button>
+<button class="s" id="rst">Reset</button></div>
+<div class="mu" id="pg"></div>
+<audio id="au" controls></audio>
+<div class="row" style="margin-top:10px"><button class="s" id="exw">⬇ Ekspor WAV</button><button class="s" id="exm">⬇ Ekspor MP3</button></div></div>
+
+<div class="card" id="chc" hidden><b>Chord (ikut pitch)</b><div id="chords" style="margin-top:8px"></div>
+<div class="mu">Hasil berupa perkiraan, bukan 100% akurat.</div></div>
+
+<div class="card"><b>🎤 Tuner gitar</b><div class="big" id="tn">-</div><div class="mu" id="tc">Tekan mulai, petik satu senar</div>
+<button id="tb" style="margin-top:8px">Mulai</button></div>
+
+<script>
+const $=s=>document.querySelector(s),NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const wait=()=>new Promise(r=>setTimeout(r,0));
+let buf,chords=[],keys=[],sem=0,tempo=1,outCh=null,outSr=0,fileUrl;
+const au=$('#au');
+
+function fft(re,im){const n=re.length;for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]]}}
+for(let l=2;l<=n;l<<=1){const a=-2*Math.PI/l,wr=Math.cos(a),wi=Math.sin(a);for(let i=0;i<n;i+=l){let cr=1,ci=0;for(let k=0;k<l/2;k++){const u=i+k,v=u+l/2,xr=re[v]*cr-im[v]*ci,xi=re[v]*ci+im[v]*cr;re[v]=re[u]-xr;im[v]=im[u]-xi;re[u]+=xr;im[u]+=xi;const t=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=t}}}}
+
+const KM=[6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88],Kn=[6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+function corr(a,b){const m=x=>x.reduce((s,v)=>s+v,0)/x.length,ma=m(a),mb=m(b);let n=0,da=0,db=0;for(let i=0;i<a.length;i++){n+=(a[i]-ma)*(b[i]-mb);da+=(a[i]-ma)**2;db+=(b[i]-mb)**2}return n/Math.sqrt(da*db||1)}
+const tpl=[];for(let r=0;r<12;r++){for(const [q,t] of [['',4],['m',3]]){const v=new Array(12).fill(0);v[r]=1;v[(r+t)%12]=.9;v[(r+7)%12]=.8;tpl.push({r,q,v})}}
+
+async function analyze(){
+ const sr=buf.sampleRate,N=8192,hop=Math.floor(sr*.25),len=buf.length,c0=buf.getChannelData(0),c1=buf.numberOfChannels>1?buf.getChannelData(1):c0;
+ const win=new Float32Array(N).map((_,i)=>.5-.5*Math.cos(2*Math.PI*i/N)),frames=[],tot=new Array(12).fill(0);
+ const lo=Math.ceil(70*N/sr),hi=Math.floor(2000*N/sr),pcs=[];
+ for(let k=lo;k<=hi;k++)pcs[k]=((Math.round(12*Math.log2(k*sr/N/440))+9)%12+12)%12;
+ let nf=0;
+ for(let p=0;p+N<=len;p+=hop,nf++){
+  const re=new Float32Array(N),im=new Float32Array(N);
+  for(let i=0;i<N;i++)re[i]=(c0[p+i]+c1[p+i])*.5*win[i];
+  fft(re,im);const c=new Array(12).fill(0);
+  for(let k=lo;k<=hi;k++)c[pcs[k]]+=Math.log(1+Math.hypot(re[k],im[k])*10);
+  frames.push(c);c.forEach((v,i)=>tot[i]+=v);
+  if(nf%40==0){$('#st').textContent='Menganalisis… '+Math.round(p/len*100)+'%';await wait()}
+ }
+ keys=[];for(let t=0;t<12;t++){const rot=a=>a.map((_,i)=>a[(i-t+12)%12]);keys.push({t,m:0,s:corr(tot,rot(KM))});keys.push({t,m:1,s:corr(tot,rot(Kn))})}
+ keys.sort((a,b)=>b.s-a.s);
+ chords=[];
+ for(let i=0;i+1<frames.length;i+=2){
+  const c=frames[i].map((v,j)=>v+frames[i+1][j]),e=c.reduce((s,v)=>s+v,0);
+  let best=null,bs=-1;for(const t of tpl){let d=0,a=0,b=0;for(let j=0;j<12;j++){d+=c[j]*t.v[j];a+=c[j]**2;b+=t.v[j]**2}const s=d/Math.sqrt(a*b||1);if(s>bs){bs=s;best=t}}
+  const nm=e<1?'-':best,last=chords[chords.length-1];
+  if(last&&last.c===nm)last.end=(i+2)*hop/sr;else chords.push({c:nm,start:i*hop/sr,end:(i+2)*hop/sr})
+ }
+}
+const doOf=k=>k.m?(k.t+3)%12:k.t;
+function showKey(i){const k=keys[i];$('#doKey').textContent='Do = '+NOTES[(doOf(k)+sem+12)%12];
+ $('#keyInfo').textContent='Kunci: '+NOTES[(k.t+sem+12)%12]+(k.m?' minor':' mayor')+(sem?` (sudah digeser ${sem>0?'+':''}${sem})`:'');
+ $('#alt').innerHTML='Salah? Coba: '+keys.slice(0,4).map((x,j)=>`<button class="s" data-i="${j}">${NOTES[x.t]}${x.m?'m':''}</button>`).join('');
+ curKey=i}
+let curKey=0;
+$('#alt').onclick=e=>{if(e.target.dataset.i)showKey(+e.target.dataset.i)};
+function cname(c){return c==='-'||!c?'-':NOTES[(c.r+sem+12)%12]+c.q}
+function drawChords(){$('#chords').innerHTML=chords.map((c,i)=>`<div class="ch" id="c${i}">${cname(c.c)}<small>${Math.floor(c.start/60)}:${String(Math.floor(c.start%60)).padStart(2,'0')}</small></div>`).join('')}
+let hl=-1;au.ontimeupdate=()=>{const t=au.currentTime*(outCh?tempo:1);let i=chords.findIndex(c=>t>=c.start&&t<c.end);if(i>=0&&i!==hl){$('#c'+hl)?.classList.remove('on');const e=$('#c'+i);e?.classList.add('on');e?.scrollIntoView({block:'nearest'});hl=i}};
+
+$('#file').onchange=async e=>{
+ const f=e.target.files[0];if(!f)return;$('#fn').textContent=' '+f.name;$('#st').textContent='Membaca file…';
+ try{const ac=new (window.AudioContext||window.webkitAudioContext)();buf=await ac.decodeAudioData(await f.arrayBuffer());ac.close()}
+ catch(err){$('#st').textContent='Format tidak didukung browser ini. Coba MP3/WAV/M4A/OGG.';return}
+ if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(f);au.src=fileUrl;outCh=null;
+ sem=0;tempo=1;$('#sem').value=0;$('#tempo').value=100;$('#semv').textContent=0;$('#tv').textContent=100;
+ await analyze();$('#st').textContent='Selesai ('+Math.round(buf.duration)+' dtk)';
+ ['#res','#ctl','#chc'].forEach(s=>$(s).hidden=false);showKey(0);drawChords()};
+
+$('#sem').oninput=e=>$('#semv').textContent=e.target.value;
+$('#tempo').oninput=e=>$('#tv').textContent=e.target.value;
+
+async function wsola(chs,ratio){
+ const N=2048,H=1024,D=256,len=chs[0].length;if(len<N*2)return chs;
+ const L=Math.floor(len*ratio),nf=Math.ceil(L/H),win=new Float32Array(N).map((_,i)=>.5-.5*Math.cos(2*Math.PI*i/N));
+ const mono=chs.length>1?chs[0].map((v,i)=>(v+chs[1][i])*.5):chs[0],out=chs.map(()=>new Float32Array(L+N*2));let prev=0;
+ for(let k=0;k<nf;k++){
+  const nom=Math.round(k*H/ratio);let p=Math.min(Math.max(nom,0),len-N);
+  if(k>0){const ref=prev+H;if(ref<=len-N){let best=-1e30;for(let d=-D;d<=D;d+=8){const c=nom+d;if(c<0||c>len-N)continue;let s=0;for(let i=0;i<N;i+=8)s+=mono[c+i]*mono[ref+i];if(s>best){best=s;p=c}}}}
+  const o=k*H;chs.forEach((ch,j)=>{const O=out[j];for(let i=0;i<N;i++)O[o+i]+=ch[p+i]*win[i]});prev=p;
+  if(k%80==0){$('#pg').textContent='Memproses… '+Math.round(k/nf*100)+'%';await wait()}
+ }
+ return out.map(o=>o.subarray(0,L))}
+
+function wavBlob(chs,sr){const n=chs[0].length,c=chs.length,b=new ArrayBuffer(44+n*c*2),v=new DataView(b),w=(o,s)=>[...s].forEach((ch,i)=>v.setUint8(o+i,ch.charCodeAt(0)));
+ w(0,'RIFF');v.setUint32(4,36+n*c*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,c,true);v.setUint32(24,sr,true);v.setUint32(28,sr*c*2,true);v.setUint16(32,c*2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*c*2,true);
+ let o=44;for(let i=0;i<n;i++)for(let j=0;j<c;j++){const s=Math.max(-1,Math.min(1,chs[j][i]));v.setInt16(o,s<0?s*32768:s*32767,true);o+=2}
+ return new Blob([b],{type:'audio/wav'})}
+
+$('#go').onclick=async()=>{
+ sem=+$('#sem').value;tempo=+$('#tempo').value/100;const r=2**(sem/12);
+ if(sem===0&&tempo===1){au.src=fileUrl;outCh=null;showKey(curKey);drawChords();return}
+ $('#go').disabled=true;au.pause();
+ let chs=[...Array(Math.min(2,buf.numberOfChannels))].map((_,i)=>buf.getChannelData(i));
+ if(r!==1){const m=Math.floor(chs[0].length/r);chs=chs.map(c=>{const o=new Float32Array(m);for(let i=0;i<m;i++){const x=i*r,a=Math.floor(x),f=x-a;o[i]=c[a]*(1-f)+(c[a+1]||0)*f}return o})}
+ const ratio=r/tempo;if(Math.abs(ratio-1)>.001)chs=await wsola(chs,ratio);
+ outCh=chs;outSr=buf.sampleRate;au.src=URL.createObjectURL(wavBlob(chs,outSr));
+ $('#pg').textContent='Siap. Tekan play.';$('#go').disabled=false;showKey(curKey);drawChords();hl=-1};
+$('#rst').onclick=()=>{$('#sem').value=0;$('#tempo').value=100;$('#semv').textContent=0;$('#tv').textContent=100;$('#go').click()};
+
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()}
+const cur=()=>outCh||[...Array(Math.min(2,buf.numberOfChannels))].map((_,i)=>buf.getChannelData(i));
+$('#exw').onclick=()=>buf&&dl(wavBlob(cur(),buf.sampleRate),'hasil.wav');
+$('#exm').onclick=async()=>{if(!buf)return;$('#pg').textContent='Menyiapkan MP3…';
+ try{if(!window.lamejs)await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s)})}
+ catch(e){$('#pg').textContent='MP3 butuh internet sekali untuk memuat encoder. Pakai WAV jika offline.';return}
+ const chs=cur(),sr=buf.sampleRate,enc=new lamejs.Mp3Encoder(chs.length,sr,128),I=a=>{const o=new Int16Array(a.length);for(let i=0;i<a.length;i++){const s=Math.max(-1,Math.min(1,a[i]));o[i]=s<0?s*32768:s*32767}return o},parts=[];
+ for(let i=0;i<chs[0].length;i+=1152){const l=I(chs[0].subarray(i,i+1152)),d=chs.length>1?enc.encodeBuffer(l,I(chs[1].subarray(i,i+1152))):enc.encodeBuffer(l);if(d.length)parts.push(d);if(i%(1152*300)==0){$('#pg').textContent='Encode MP3… '+Math.round(i/chs[0].length*100)+'%';await wait()}}
+ parts.push(enc.flush());$('#pg').textContent='';dl(new Blob(parts,{type:'audio/mpeg'}),'hasil.mp3')};
+
+// Tuner
+let tOn=false,tStream,tAc;
+$('#tb').onclick=async()=>{
+ if(tOn){tOn=false;tStream.getTracks().forEach(t=>t.stop());tAc.close();$('#tb').textContent='Mulai';return}
+ try{tStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})}catch(e){$('#tc').textContent='Izin mikrofon ditolak';return}
+ tAc=new AudioContext();const an=tAc.createAnalyser();an.fftSize=4096;tAc.createMediaStreamSource(tStream).connect(an);tOn=true;$('#tb').textContent='Berhenti';
+ const d=new Float32Array(4096),sr=tAc.sampleRate;
+ (function loop(){if(!tOn)return;an.getFloatTimeDomainData(d);let rms=0;for(const x of d)rms+=x*x;rms=Math.sqrt(rms/d.length);
+  if(rms>.01){let bl=0,bc=0;const mn=Math.floor(sr/1000),mx=Math.floor(sr/70),cs=[];for(let l=mn;l<=mx;l++){let s=0,e=0;for(let i=0;i<2048;i++){s+=d[i]*d[i+l];e+=d[i+l]*d[i+l]}cs[l]=s/Math.sqrt(e+1e-9)}
+   let mxv=Math.max(...cs.filter(x=>x!==undefined));for(let l=mn;l<=mx;l++)if(cs[l]>mxv*.9){bl=l;break}
+   if(bl){const f=sr/bl,n=12*Math.log2(f/440)+69,r=Math.round(n),c=Math.round((n-r)*100);
+    $('#tn').textContent=NOTES[((r%12)+12)%12]+Math.floor(r/12-1);$('#tc').textContent=f.toFixed(1)+' Hz · '+(c>0?'+':'')+c+' cent '+(Math.abs(c)<6?'✅ pas':c>0?'(turunkan)':'(naikkan)')}}
+  requestAnimationFrame(loop)})()};
+
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
+</script></body></html>
